@@ -119,7 +119,7 @@ def _run(data: dict) -> bytes:
     company_name   = data.get("company_name", "")
     document_title = data.get("document_title", "Document")
     copy_text      = data.get("copy_text", "")
-    page_size      = data.get("page_size", "a4")
+    page_size      = data.get("page_size", "letter")
     footer_text    = data.get("footer_text", "")
     # Changed from file_urls to file_data (base64 strings)
     file_data      = data.get("file_data", [])

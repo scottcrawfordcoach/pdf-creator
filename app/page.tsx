@@ -39,7 +39,7 @@ export default function Home() {
   const [companyName,   setCompanyName]   = useState('')
   const [documentTitle, setDocumentTitle] = useState('')
   const [copyText,      setCopyText]      = useState('')
-  const [pageSize,      setPageSize]      = useState<'a4' | 'letter'>('a4')
+  const [pageSize,      setPageSize]      = useState<'a4' | 'letter'>('letter')
   const [footerText,    setFooterText]    = useState('')
 
   // ── Generation state ────────────────────────────────────────────────────────

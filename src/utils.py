@@ -85,7 +85,7 @@ def build_minimal_config(
         "document_title":     title,
         "document_subtitle":  "Please complete all sections. Fields marked * are required.",
         "footer_text":        f"{company}  |  Confidential" if company else "",
-        "page_size":          "a4",
+        "page_size":          "letter",
         "output":             output or f"output/{slug}.pdf",
         "sections": [
             {
