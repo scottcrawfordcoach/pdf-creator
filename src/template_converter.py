@@ -85,7 +85,8 @@ For EACH area return a JSON object in a top-level "fields" array with:
   h_pct      – field height as percentage of image height
 
 Rules:
-- Be precise with coordinates.
+- Be precise with coordinates. For explicit bordered boxes, return the interior
+  edge (just inside the border line), not the outer edge of the border itself.
 - Do NOT include decorative lines, headers, logos, or static body text.
 - Use type "multiline" for large text areas (Comments, Notes, Address blocks).
 - Use type "signature" for signature lines/boxes.
@@ -407,6 +408,14 @@ def _add_fitz_widget(
         y0 = (y_pct / 100.0) * page_h
         x1 = x0 + (w_pct / 100.0) * page_w
         y1 = y0 + (h_pct / 100.0) * page_h
+
+        # Inset bordered fields so the widget sits inside the visible box border
+        # rather than overlapping it. GPT-4o tends to return the outer edge.
+        if has_border:
+            inset = 3  # points
+            x0 += inset; y0 += inset
+            x1 -= inset; y1 -= inset
+
         rect = fitz.Rect(x0, y0, x1, y1)
 
         widget = fitz.Widget()
