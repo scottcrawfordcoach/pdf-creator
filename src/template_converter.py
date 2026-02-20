@@ -52,6 +52,8 @@ _PAGE_WIDTH_PTS  = 612.0   # US Letter width; height derived from image AR
 _FONT            = "Helvetica"
 _FONT_SIZE       = 9
 _RENDER_DPI      = 96      # DPI for PDF → PNG rendering (sent to GPT-4o; 96 is plenty for field detection)
+_MAX_PAGES       = 8       # Hard cap to stay within Vercel's 60s timeout
+_CHUNK_SIZE      = 4       # Pages per GPT-4o call (keeps each call under ~25s)
 
 # ── Detection prompt ───────────────────────────────────────────────────────────
 
@@ -209,23 +211,27 @@ def _convert_pdf(
 
         doc          = fitz.open(src_path)
         total_fields = 0
+        page_count   = min(len(doc), _MAX_PAGES)  # cap for timeout safety
 
-        # Render every page to PNG at reduced DPI
+        # Render pages to PNG at reduced DPI
         page_images: List[Tuple[str, float, float]] = []  # (b64_data_uri, page_w, page_h)
-        for page in doc:
+        for page in list(doc)[:page_count]:
             mat       = fitz.Matrix(_RENDER_DPI / 72, _RENDER_DPI / 72)
             pix       = page.get_pixmap(matrix=mat, alpha=False)
             png_bytes = pix.tobytes("png")
             b64       = "data:image/png;base64," + base64.b64encode(png_bytes).decode()
             page_images.append((b64, page.rect.width, page.rect.height))
 
-        # Single GPT-4o call covering all pages at once
+        # Process in chunks so each GPT-4o call finishes well within the timeout
+        all_fields: List[List[Dict[str, Any]]] = []
         if _OPENAI_AVAILABLE and openai_api_key:
-            all_fields = _detect_fields_multipage(page_images, openai_api_key)
+            for chunk_start in range(0, len(page_images), _CHUNK_SIZE):
+                chunk = page_images[chunk_start:chunk_start + _CHUNK_SIZE]
+                all_fields.extend(_detect_fields_multipage(chunk, openai_api_key))
         else:
             all_fields = [[] for _ in page_images]
 
-        for page_num, page in enumerate(doc):
+        for page_num, page in enumerate(list(doc)[:page_count]):
             page_w, page_h = page_images[page_num][1], page_images[page_num][2]
             fields = all_fields[page_num] if page_num < len(all_fields) else []
             for i, field in enumerate(fields):
@@ -284,7 +290,7 @@ def _detect_fields_multipage(
         response = client.chat.completions.create(
             model="gpt-4o",
             temperature=0,
-            max_tokens=4096 * min(n, 4),
+            max_tokens=2048 * n,   # 2048 per page is plenty for field JSON
             messages=[{"role": "user", "content": content}],
         )
         raw = (response.choices[0].message.content or "").strip()
