@@ -2,6 +2,9 @@
   "functions": {
     "api/generate.py": {
       "maxDuration": 60
+    },
+    "api/convert_template.py": {
+      "maxDuration": 60
     }
   }
 }

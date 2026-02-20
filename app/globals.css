@@ -56,6 +56,18 @@ body {
            transition-all duration-200 cursor-pointer;
   }
 
+  /* Primary emerald CTA button (template path) */
+  .btn-emerald {
+    @apply inline-flex items-center gap-2 px-7 py-3.5 rounded-xl
+           bg-gradient-to-r from-emerald-600 to-emerald-500
+           text-white font-semibold text-sm
+           shadow-[0_0_28px_rgba(16,185,129,0.30)]
+           hover:shadow-[0_0_40px_rgba(16,185,129,0.55)]
+           hover:from-emerald-500 hover:to-emerald-400
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none
+           transition-all duration-200 cursor-pointer;
+  }
+
   /* Download button */
   .btn-download {
     @apply inline-flex items-center gap-2 px-7 py-3.5 rounded-xl
@@ -77,3 +89,13 @@ body {
 ::-webkit-scrollbar       { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.3); border-radius: 3px; }
+
+/* ── Animations ────────────────────────────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out both;
+}
