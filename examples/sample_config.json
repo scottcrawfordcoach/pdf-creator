@@ -1,0 +1,85 @@
+{
+  "_comment": "Copy your logo to the 'assets/' folder and update the 'logo' path below.",
+
+  "logo":              "assets/logo.png",
+  "company_name":      "Acme Corporation",
+  "document_title":    "Client Intake Form",
+  "document_subtitle": "Please complete all sections. Fields marked * are required.",
+  "footer_text":       "Acme Corporation  |  Confidential  |  2026",
+  "page_size":         "a4",
+  "output":            "output/acme_intake_form.pdf",
+
+  "sections": [
+    {
+      "title":   "Personal Details",
+      "columns": 2,
+      "fields": [
+        { "type": "text",  "label": "First Name",    "name": "first_name",   "required": true  },
+        { "type": "text",  "label": "Last Name",     "name": "last_name",    "required": true  },
+        { "type": "email", "label": "Email Address", "name": "email",        "required": true  },
+        { "type": "phone", "label": "Phone Number",  "name": "phone"                           },
+        { "type": "date",  "label": "Date of Birth", "name": "dob"                             },
+        { "type": "text",  "label": "Job Title",     "name": "job_title"                       }
+      ]
+    },
+
+    {
+      "title":   "Address",
+      "columns": 1,
+      "fields": [
+        { "type": "text", "label": "Street Address",   "name": "address_line_1", "required": true },
+        { "type": "text", "label": "Suburb / City",    "name": "city"                             },
+        { "type": "text", "label": "State / Province", "name": "state"                            },
+        { "type": "text", "label": "Postcode / ZIP",   "name": "postcode"                         }
+      ]
+    },
+
+    {
+      "title":   "Service Requirements",
+      "columns": 1,
+      "intro":   "Tell us what you need so we can match you with the right solution.",
+      "fields": [
+        {
+          "type":     "dropdown",
+          "label":    "Service Type",
+          "name":     "service_type",
+          "required": true,
+          "options":  ["-- Please select --", "Standard", "Premium", "Enterprise", "Custom"]
+        },
+        {
+          "type":    "textarea",
+          "label":   "Project Description",
+          "name":    "project_description",
+          "height":  3.0
+        },
+        {
+          "type":  "date",
+          "label": "Requested Start Date",
+          "name":  "start_date"
+        },
+        {
+          "type":  "checkbox",
+          "label": "I would like to receive updates by email",
+          "name":  "email_opt_in"
+        },
+        {
+          "type":     "checkbox",
+          "label":    "I have read and agree to the Terms & Conditions",
+          "name":     "terms_agreed",
+          "required": true
+        }
+      ]
+    },
+
+    {
+      "title":   "Authorisation",
+      "columns": 2,
+      "fields": [
+        { "type": "text",      "label": "Printed Name", "name": "printed_name", "required": true  },
+        { "type": "date",      "label": "Date",         "name": "auth_date",    "required": true  },
+        { "type": "signature", "label": "Signature",    "name": "signature",    "required": true,
+          "full_width": true, "height": 2.5 }
+      ]
+    }
+  ]
+}
