@@ -38,49 +38,39 @@ export default function TemplatePage() {
   // ── Convert handler ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!templateFile) return
-    const ext  = templateFile.name.split('.').pop() || 'bin'
-    const path = `templates/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-    let supabaseUrl = ''
-    let supabaseKey = ''
+    const ext = templateFile.name.split('.').pop() || 'bin'
+    let deletePath = ''
     try {
       setStatus('uploading')
-
-      // Fetch Supabase creds server-side so naming convention doesn't matter
-      const cfgRes = await fetch('/api/supabase-config')
-      if (!cfgRes.ok) throw new Error('Could not load storage configuration')
-      const cfg = await cfgRes.json()
-      supabaseUrl = cfg.url
-      supabaseKey = cfg.anonKey
       setErrorMessage(null)
       setPdfBlob(null)
       setFieldCount(null)
 
-      // Upload directly to Supabase Storage — avoids Vercel's 4.5 MB body limit
-      const uploadRes = await fetch(
-        `${supabaseUrl}/storage/v1/object/pdf-creator/${path}`,
-        {
-          method:  'POST',
-          headers: {
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type':  templateFile.type || 'application/octet-stream',
-          },
-          body: templateFile,
-        },
-      )
+      // 1. Get a signed upload URL from our server (uses service-role key, bypasses RLS)
+      const urlRes = await fetch(`/api/get-upload-url?ext=${ext}`)
+      if (!urlRes.ok) throw new Error('Could not get upload URL')
+      const { uploadUrl, publicUrl, deletePath: dp } = await urlRes.json()
+      deletePath = dp
+
+      // 2. PUT the raw file directly to Supabase using the signed URL
+      const uploadRes = await fetch(uploadUrl, {
+        method:  'PUT',
+        headers: { 'Content-Type': templateFile.type || 'application/octet-stream' },
+        body:    templateFile,
+      })
       if (!uploadRes.ok) {
         const text = await uploadRes.text().catch(() => `HTTP ${uploadRes.status}`)
         throw new Error(`Upload failed: ${text}`)
       }
 
-      const fileUrl = `${supabaseUrl}/storage/v1/object/public/pdf-creator/${path}`
-
       setStatus('detecting')
 
+      // 3. Send just the public URL to the Python API
       const res = await fetch('/api/convert_template', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          file_url:       fileUrl,
+          file_url:       publicUrl,
           document_title: documentTitle || templateFile.name.replace(/\.(png|pdf)$/i, ''),
         }),
       })
@@ -101,11 +91,14 @@ export default function TemplatePage() {
       setStatus('error')
       setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred.')
     } finally {
-      // Clean up the staging file (fire-and-forget)
-      fetch(
-        `${supabaseUrl}/storage/v1/object/pdf-creator/${path}`,
-        { method: 'DELETE', headers: { 'Authorization': `Bearer ${supabaseKey}` } },
-      ).catch(() => { /* ignore */ })
+      // 4. Clean up the staging file server-side (fire-and-forget)
+      if (deletePath) {
+        fetch('/api/delete-upload', {
+          method:  'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ path: deletePath }),
+        }).catch(() => { /* ignore */ })
+      }
     }
   }, [templateFile, documentTitle])
 
