@@ -16,33 +16,42 @@ export async function GET(req: Request) {
   const serviceRoleKey   = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json({ error: 'Storage not configured' }, { status: 500 })
+    return NextResponse.json({
+      error:  'Storage not configured',
+      hasUrl: !!supabaseUrl,
+      hasSrk: !!serviceRoleKey,
+    }, { status: 500 })
   }
 
   // Ask Supabase to create a signed upload URL for this path
-  const res = await fetch(
-    `${supabaseUrl}/storage/v1/object/sign/upload/pdf-creator/${path}`,
-    {
-      method:  'POST',
-      headers: {
-        'Authorization': `Bearer ${serviceRoleKey}`,
-        'Content-Type':  'application/json',
-      },
+  const signEndpoint = `${supabaseUrl}/storage/v1/object/sign/upload/pdf-creator/${path}`
+  const res = await fetch(signEndpoint, {
+    method:  'POST',
+    headers: {
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type':  'application/json',
     },
-  )
+  })
 
   if (!res.ok) {
     const body = await res.text()
-    return NextResponse.json({ error: `Supabase error: ${body}` }, { status: 502 })
+    return NextResponse.json({
+      error:    `Supabase error (${res.status})`,
+      detail:   body,
+      endpoint: signEndpoint.replace(supabaseUrl, '[url]'),
+    }, { status: 502 })
   }
 
-  const { token } = await res.json()
+  const json = await res.json()
+  const token = json.token ?? json.signedToken ?? json.signed_url
+
+  if (!token) {
+    return NextResponse.json({ error: 'No token in Supabase response', raw: json }, { status: 502 })
+  }
 
   // The browser will PUT to this URL with the raw file as the body
   const uploadUrl  = `${supabaseUrl}/storage/v1/object/upload/sign/pdf-creator/${path}?token=${token}`
-  // After upload, the public read URL
   const publicUrl  = `${supabaseUrl}/storage/v1/object/public/pdf-creator/${path}`
-  // DELETE URL (for cleanup) — still needs service-role, so we handle it server-side
   const deletePath = path
 
   return NextResponse.json({ uploadUrl, publicUrl, deletePath })

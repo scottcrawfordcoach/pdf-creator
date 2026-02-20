@@ -48,7 +48,12 @@ export default function TemplatePage() {
 
       // 1. Get a signed upload URL from our server (uses service-role key, bypasses RLS)
       const urlRes = await fetch(`/api/get-upload-url?ext=${ext}`)
-      if (!urlRes.ok) throw new Error('Could not get upload URL')
+      if (!urlRes.ok) {
+        const detail = await urlRes.json().catch(() => ({}))
+        throw new Error(detail.error
+          ? `Upload URL: ${detail.error}${detail.detail ? ` — ${detail.detail}` : ''}${detail.hasUrl === false ? ' (missing SUPABASE_URL)' : ''}${detail.hasSrk === false ? ' (missing SUPABASE_SERVICE_ROLE_KEY)' : ''}`
+          : `Could not get upload URL (HTTP ${urlRes.status})`)
+      }
       const { uploadUrl, publicUrl, deletePath: dp } = await urlRes.json()
       deletePath = dp
 
