@@ -29,7 +29,9 @@ export async function GET(req: Request) {
     method:  'POST',
     headers: {
       'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type':  'application/json',
     },
+    body: JSON.stringify({ expiresIn: 300 }),
   })
 
   if (!res.ok) {
