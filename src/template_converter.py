@@ -85,8 +85,14 @@ For EACH area return a JSON object in a top-level "fields" array with:
   h_pct      – field height as percentage of image height
 
 Rules:
-- Be precise with coordinates. For explicit bordered boxes, return the interior
-  edge (just inside the border line), not the outer edge of the border itself.
+- CRITICAL: The field rectangle must cover ONLY the blank input area — never \
+  the label text itself. Labels sit outside (above, below, or beside) the field. \
+  The y_pct must start AFTER any label text above the input area.
+- CRITICAL: For tables, detect EACH cell individually as its own separate field. \
+  Never merge multiple table cells into one large field. Each cell in a grid \
+  gets its own entry with correct x_pct, y_pct, w_pct, h_pct.
+- For bordered boxes, return the interior edge coordinates (just inside the \
+  border line), not the outer edge of the border.
 - Do NOT include decorative lines, headers, logos, or static body text.
 - Use type "multiline" for large text areas (Comments, Notes, Address blocks).
 - Use type "signature" for signature lines/boxes.
