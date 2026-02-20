@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   }
 
   // Ask Supabase to create a signed upload URL for this path
-  const signEndpoint = `${supabaseUrl}/storage/v1/object/sign/upload/pdf-creator/${path}`
+  const signEndpoint = `${supabaseUrl}/storage/v1/object/upload/sign/pdf-creator/${path}`
   const res = await fetch(signEndpoint, {
     method:  'POST',
     headers: {
@@ -44,14 +44,14 @@ export async function GET(req: Request) {
   }
 
   const json = await res.json()
-  const token = json.token ?? json.signedToken ?? json.signed_url
+  // Supabase returns { token, signedURL } — use signedURL directly if present
+  const uploadUrl = json.signedURL
+    ? `${supabaseUrl}${json.signedURL}`
+    : `${supabaseUrl}/storage/v1/object/upload/sign/pdf-creator/${path}?token=${json.token ?? json.signedToken}`
 
-  if (!token) {
+  if (!json.signedURL && !json.token && !json.signedToken) {
     return NextResponse.json({ error: 'No token in Supabase response', raw: json }, { status: 502 })
   }
-
-  // The browser will PUT to this URL with the raw file as the body
-  const uploadUrl  = `${supabaseUrl}/storage/v1/object/upload/sign/pdf-creator/${path}?token=${token}`
   const publicUrl  = `${supabaseUrl}/storage/v1/object/public/pdf-creator/${path}`
   const deletePath = path
 
