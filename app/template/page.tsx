@@ -38,12 +38,19 @@ export default function TemplatePage() {
   // ── Convert handler ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!templateFile) return
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     const ext  = templateFile.name.split('.').pop() || 'bin'
     const path = `templates/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    let supabaseUrl = ''
+    let supabaseKey = ''
     try {
       setStatus('uploading')
+
+      // Fetch Supabase creds server-side so naming convention doesn't matter
+      const cfgRes = await fetch('/api/supabase-config')
+      if (!cfgRes.ok) throw new Error('Could not load storage configuration')
+      const cfg = await cfgRes.json()
+      supabaseUrl = cfg.url
+      supabaseKey = cfg.anonKey
       setErrorMessage(null)
       setPdfBlob(null)
       setFieldCount(null)
