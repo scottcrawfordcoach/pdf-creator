@@ -95,18 +95,24 @@ Rules:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
-def convert_template(
-    file_b64:       str,
+def convert_template_from_bytes(
+    file_bytes:     bytes,
+    mime:           str = "",
     document_title: str = "",
     openai_api_key: str = "",
 ) -> Tuple[bytes, int]:
     """
-    Convert a base64-encoded PNG or PDF template to a fillable PDF.
+    Convert raw PNG or PDF bytes to a fillable PDF.
+    Preferred entry point when the caller already has the file in memory
+    (e.g. downloaded from a URL), avoiding a redundant b64 round-trip.
 
     Parameters
     ----------
-    file_b64 : str
-        Full data-URI or raw base64 string for the source file.
+    file_bytes : bytes
+        Raw file content.
+    mime : str
+        MIME type hint (e.g. 'application/pdf' or 'image/png').
+        Falls back to magic-byte detection when empty.
     document_title : str
         Optional PDF document title embedded in metadata.
     openai_api_key : str
@@ -116,8 +122,8 @@ def convert_template(
     -------
     (pdf_bytes, total_field_count)
     """
-    file_bytes = _decode_b64(file_b64)
-    mime       = _sniff_mime(file_bytes, file_b64)
+    if not mime:
+        mime = _sniff_mime(file_bytes)
 
     if mime == "application/pdf":
         if not _FITZ_AVAILABLE:
@@ -127,7 +133,24 @@ def convert_template(
             )
         return _convert_pdf(file_bytes, document_title, openai_api_key)
     else:
+        # Build a data-URI so _convert_image can forward it to GPT-4o
+        b64      = base64.b64encode(file_bytes).decode()
+        file_b64 = f"data:image/png;base64,{b64}"
         return _convert_image(file_b64, file_bytes, document_title, openai_api_key)
+
+
+def convert_template(
+    file_b64:       str,
+    document_title: str = "",
+    openai_api_key: str = "",
+) -> Tuple[bytes, int]:
+    """
+    Convert a base64-encoded PNG or PDF template to a fillable PDF.
+    Kept for backwards-compatibility; prefer convert_template_from_bytes.
+    """
+    file_bytes = _decode_b64(file_b64)
+    mime       = _sniff_mime(file_bytes, file_b64)
+    return convert_template_from_bytes(file_bytes, mime, document_title, openai_api_key)
 
 
 # ── PNG / image path ───────────────────────────────────────────────────────────

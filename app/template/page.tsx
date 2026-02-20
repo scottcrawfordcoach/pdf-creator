@@ -10,25 +10,15 @@ import SingleDropZone from '@/components/SingleDropZone'
 
 // ── Status type ────────────────────────────────────────────────────────────────
 
-type ConvertStatus = 'idle' | 'encoding' | 'detecting' | 'building' | 'done' | 'error'
+type ConvertStatus = 'idle' | 'uploading' | 'detecting' | 'building' | 'done' | 'error'
 
 const STATUS_STEPS: { key: ConvertStatus; label: string }[] = [
-  { key: 'encoding',  label: 'Encoding image'         },
+  { key: 'uploading', label: 'Uploading template'     },
   { key: 'detecting', label: 'AI detecting fields'    },
   { key: 'building',  label: 'Building fillable PDF'  },
 ]
 
-const LOADING_STATUSES: ConvertStatus[] = ['encoding', 'detecting', 'building']
-
-// ── File helper ────────────────────────────────────────────────────────────────
-
-const fileToBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload  = () => resolve(reader.result as string)
-    reader.onerror = error => reject(error)
-  })
+const LOADING_STATUSES: ConvertStatus[] = ['uploading', 'detecting', 'building']
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
@@ -48,13 +38,34 @@ export default function TemplatePage() {
   // ── Convert handler ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!templateFile) return
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const ext  = templateFile.name.split('.').pop() || 'bin'
+    const path = `templates/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
     try {
-      setStatus('encoding')
+      setStatus('uploading')
       setErrorMessage(null)
       setPdfBlob(null)
       setFieldCount(null)
 
-      const imageData = await fileToBase64(templateFile)
+      // Upload directly to Supabase Storage — avoids Vercel's 4.5 MB body limit
+      const uploadRes = await fetch(
+        `${supabaseUrl}/storage/v1/object/pdf-creator/${path}`,
+        {
+          method:  'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type':  templateFile.type || 'application/octet-stream',
+          },
+          body: templateFile,
+        },
+      )
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text().catch(() => `HTTP ${uploadRes.status}`)
+        throw new Error(`Upload failed: ${text}`)
+      }
+
+      const fileUrl = `${supabaseUrl}/storage/v1/object/public/pdf-creator/${path}`
 
       setStatus('detecting')
 
@@ -62,7 +73,7 @@ export default function TemplatePage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          file_data:      imageData,
+          file_url:       fileUrl,
           document_title: documentTitle || templateFile.name.replace(/\.(png|pdf)$/i, ''),
         }),
       })
@@ -74,7 +85,6 @@ export default function TemplatePage() {
 
       setStatus('building')
 
-      // Server returns the field count in a response header
       const count = parseInt(res.headers.get('X-Field-Count') ?? '0', 10)
       if (count) setFieldCount(count)
 
@@ -83,6 +93,12 @@ export default function TemplatePage() {
     } catch (err: unknown) {
       setStatus('error')
       setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred.')
+    } finally {
+      // Clean up the staging file (fire-and-forget)
+      fetch(
+        `${supabaseUrl}/storage/v1/object/pdf-creator/${path}`,
+        { method: 'DELETE', headers: { 'Authorization': `Bearer ${supabaseKey}` } },
+      ).catch(() => { /* ignore */ })
     }
   }, [templateFile, documentTitle])
 

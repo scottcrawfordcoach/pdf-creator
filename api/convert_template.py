@@ -1,17 +1,16 @@
 """
 api/convert_template.py
 ────────────────────────
-Vercel Python serverless function – POST /api/convert-template
+Vercel Python serverless function – POST /api/convert_template
 
-Receives a pre-designed PNG form image (base64), uses GPT-4o Vision to detect
-every empty input box, and returns a fillable PDF with the original design
-preserved as a background and transparent AcroForm fields overlaid at every
-detected position.
+The browser uploads the template file directly to Supabase Storage and sends
+only a small JSON body containing the public URL. This sidesteps Vercel's
+4.5 MB serverless body limit for any file size.
 
 Request body (JSON):
 {
-  "image_data":     "data:image/png;base64,…",   // base64 PNG (data-URI ok)
-  "document_title": "Client Intake Form"          // optional
+  "file_url":       "https://….supabase.co/storage/v1/object/public/…",
+  "document_title": "Client Intake Form"   // optional
 }
 
 Response: application/pdf binary
@@ -31,7 +30,9 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from src.template_converter import convert_template
+import requests as req_lib
+
+from src.template_converter import convert_template_from_bytes
 
 # ── CORS headers ───────────────────────────────────────────────────────────────
 _CORS = {
@@ -67,19 +68,30 @@ class handler(BaseHTTPRequestHandler):
             self._json_error(400, f"Invalid request body: {exc}")
             return
 
-        image_data     = data.get("file_data") or data.get("image_data", "")
+        file_url       = data.get("file_url", "")
         document_title = data.get("document_title", "Form")
 
-        if not image_data:
-            self._json_error(400, "file_data is required")
+        if not file_url:
+            self._json_error(400, "file_url is required")
+            return
+
+        # Download the template from Supabase Storage
+        try:
+            dl = req_lib.get(file_url, timeout=60)
+            dl.raise_for_status()
+            file_bytes = dl.content
+            mime = dl.headers.get("Content-Type", "").split(";")[0].strip()
+        except Exception as exc:
+            self._json_error(502, f"Could not download template: {exc}")
             return
 
         # Read API key from environment
         openai_api_key = os.environ.get("OPENAI_API_KEY", "")
 
         try:
-            pdf_bytes, field_count = convert_template(
-                file_b64=image_data,
+            pdf_bytes, field_count = convert_template_from_bytes(
+                file_bytes=file_bytes,
+                mime=mime,
                 document_title=document_title,
                 openai_api_key=openai_api_key,
             )
