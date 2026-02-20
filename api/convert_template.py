@@ -76,6 +76,8 @@ class handler(BaseHTTPRequestHandler):
             return
 
         # Download the template from Supabase Storage
+        # Strip any stray whitespace / URL-encoded newlines introduced by env-var storage
+        file_url = file_url.strip().replace('\r', '').replace('\n', '')
         try:
             dl = req_lib.get(file_url, timeout=60)
             dl.raise_for_status()

@@ -12,8 +12,8 @@ export async function GET(req: Request) {
   const ext  = (searchParams.get('ext') || 'bin').replace(/[^a-z0-9]/gi, '')
   const path = `templates/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
-  const supabaseUrl      = process.env.SUPABASE_URL      || process.env.NEXT_PUBLIC_SUPABASE_URL      || ''
-  const serviceRoleKey   = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  const supabaseUrl      = (process.env.SUPABASE_URL      || process.env.NEXT_PUBLIC_SUPABASE_URL      || '').trim().replace(/[\r\n]/g, '')
+  const serviceRoleKey   = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/[\r\n]/g, '')
 
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({
