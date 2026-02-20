@@ -29,9 +29,7 @@ export async function GET(req: Request) {
     method:  'POST',
     headers: {
       'Authorization': `Bearer ${serviceRoleKey}`,
-      'Content-Type':  'application/json',
     },
-    body: JSON.stringify({ upsert: false }),
   })
 
   if (!res.ok) {
