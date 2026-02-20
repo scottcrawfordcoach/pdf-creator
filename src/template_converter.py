@@ -51,7 +51,7 @@ except ImportError:
 _PAGE_WIDTH_PTS  = 612.0   # US Letter width; height derived from image AR
 _FONT            = "Helvetica"
 _FONT_SIZE       = 9
-_RENDER_DPI      = 150     # DPI for PDF → PNG rendering (sent to GPT-4o)
+_RENDER_DPI      = 96      # DPI for PDF → PNG rendering (sent to GPT-4o; 96 is plenty for field detection)
 
 # ── Detection prompt ───────────────────────────────────────────────────────────
 
@@ -203,27 +203,27 @@ def _convert_pdf(
         doc          = fitz.open(src_path)
         total_fields = 0
 
-        for page_num, page in enumerate(doc):
-            page_w = page.rect.width
-            page_h = page.rect.height
-
-            # Render the page to PNG for GPT-4o analysis
+        # Render every page to PNG at reduced DPI
+        page_images: List[Tuple[str, float, float]] = []  # (b64_data_uri, page_w, page_h)
+        for page in doc:
             mat       = fitz.Matrix(_RENDER_DPI / 72, _RENDER_DPI / 72)
             pix       = page.get_pixmap(matrix=mat, alpha=False)
             png_bytes = pix.tobytes("png")
-            b64_for_ai = (
-                "data:image/png;base64,"
-                + base64.b64encode(png_bytes).decode()
-            )
+            b64       = "data:image/png;base64," + base64.b64encode(png_bytes).decode()
+            page_images.append((b64, page.rect.width, page.rect.height))
 
-            fields: List[Dict[str, Any]] = []
-            if _OPENAI_AVAILABLE and openai_api_key:
-                fields = _detect_fields(b64_for_ai, openai_api_key)
+        # Single GPT-4o call covering all pages at once
+        if _OPENAI_AVAILABLE and openai_api_key:
+            all_fields = _detect_fields_multipage(page_images, openai_api_key)
+        else:
+            all_fields = [[] for _ in page_images]
 
+        for page_num, page in enumerate(doc):
+            page_w, page_h = page_images[page_num][1], page_images[page_num][2]
+            fields = all_fields[page_num] if page_num < len(all_fields) else []
             for i, field in enumerate(fields):
                 _add_fitz_widget(page, field, page_w, page_h,
                                  index=page_num * 10_000 + i)
-
             total_fields += len(fields)
 
         if document_title:
@@ -239,42 +239,73 @@ def _convert_pdf(
 
 # ── Shared field-detection ─────────────────────────────────────────────────────
 
-def _detect_fields(image_b64_data_uri: str, api_key: str) -> List[Dict[str, Any]]:
+def _detect_fields_multipage(
+    page_images: List[Tuple[str, float, float]],
+    api_key:     str,
+) -> List[List[Dict[str, Any]]]:
     """
-    Call GPT-4o with vision to detect form field bounding boxes.
-    Always returns a list (possibly empty) — never raises.
+    Single GPT-4o call for ALL pages at once.
+    Returns a list-of-lists: one inner list of field dicts per page.
+    Falls back to empty lists on any error.
     """
+    n = len(page_images)
     try:
-        client   = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key)
+
+        content: List[Any] = [
+            {
+                "type": "text",
+                "text": (
+                    f"I am sending you {n} page(s) of a form, in order. "
+                    "For EACH page detect all form fields using the rules below, "
+                    "and return a JSON object with a single key 'pages' whose value "
+                    f"is an array of exactly {n} elements. Each element is an object "
+                    "with a single key 'fields' containing the array of field objects "
+                    "for that page (empty array if no fields). "
+                    "Each field object follows the same schema described below.\n\n"
+                    + _DETECTION_PROMPT
+                ),
+            }
+        ]
+        for idx, (b64, _, _) in enumerate(page_images):
+            content.append({"type": "text", "text": f"--- Page {idx + 1} ---"})
+            content.append({
+                "type":      "image_url",
+                "image_url": {"url": b64, "detail": "high"},
+            })
+
         response = client.chat.completions.create(
             model="gpt-4o",
             temperature=0,
-            max_tokens=4096,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": _DETECTION_PROMPT},
-                        {
-                            "type":      "image_url",
-                            "image_url": {
-                                "url":    image_b64_data_uri,
-                                "detail": "high",
-                            },
-                        },
-                    ],
-                }
-            ],
+            max_tokens=4096 * min(n, 4),
+            messages=[{"role": "user", "content": content}],
         )
         raw = (response.choices[0].message.content or "").strip()
-        # Strip any accidental markdown code fences
         raw = raw.strip("` \n")
         if raw.startswith("json"):
             raw = raw[4:].strip()
         data = json.loads(raw)
-        return data.get("fields", [])
+
+        pages = data.get("pages", [])
+        result: List[List[Dict[str, Any]]] = []
+        for p in pages:
+            if isinstance(p, dict):
+                result.append(p.get("fields", []))
+            elif isinstance(p, list):
+                result.append(p)
+            else:
+                result.append([])
+        while len(result) < n:
+            result.append([])
+        return result
     except Exception:
-        return []
+        return [[] for _ in page_images]
+
+
+def _detect_fields(image_b64_data_uri: str, api_key: str) -> List[Dict[str, Any]]:
+    """Single-page detection used by the PNG path — delegates to multipage."""
+    result = _detect_fields_multipage([(image_b64_data_uri, 0, 0)], api_key)
+    return result[0] if result else []
 
 
 # ── ReportLab PDF builder (PNG path) ──────────────────────────────────────────
